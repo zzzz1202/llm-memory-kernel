@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# System
+system/.dream_lock
+system/session_counter
+
+# Embeddings (regenerable)
+system/embeddings/vectors.json
+
+# Backups (large files)
+backups/
+
+# OS
+.DS_Store
+Thumbs.db

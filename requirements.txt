@@ -1,6 +1,3 @@
-# Core
-openai>=1.0.0
-
-# Optional: local embeddings (uncomment to use local models instead of API)
-# sentence-transformers>=2.2.0
-# numpy>=1.24.0
+# llm-memory-kernel
+# 零外部依赖。纯 Python 3.9+ 标准库即可运行。
+# 本文件仅用于声明：本项目不需要安装任何第三方包。

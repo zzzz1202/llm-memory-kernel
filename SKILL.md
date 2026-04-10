@@ -33,11 +33,13 @@ system/
 ├── .dream_lock          # Dream 整理锁（防并发）
 └── session_counter      # 会话计数器（用于触发 Dream）
 
-core_prompts/            # 纯净版 Prompt 模板（无品牌营销内容）
-├── INGESTION.md         # 日常记忆提取规则
-├── MAP_COMPACT.md       # Topic 微压缩（Map Phase）
-├── REDUCE_INDEX.md      # 索引重建（Reduce Phase）
-├── DREAM_PROTOCOL.md    # AutoDream 五阶段整理协议
+core_prompts/            # Prompt 模板
+├── INGESTION.md         # 日常对话 → 记忆提取
+├── INGEST_SOURCE.md     # 原始素材 → 知识提取
+├── LINT.md              # 健康检查规则（死链、孤儿、交叉引用）
+├── MAP_COMPACT.md       # Topic 合并规则（Map Phase）
+├── REDUCE_INDEX.md      # 索引重建规则（Reduce Phase）
+├── DREAM_PROTOCOL.md    # AutoDream 六阶段整理协议
 ├── TOPIC_TEMPLATE.md    # 新 Topic 文件模板
 └── ERRORS_TEMPLATE.md   # 错误自愈模板
 
@@ -106,7 +108,7 @@ python scripts/ingest.py raw/文件名.md
 python scripts/ingest.py --list
 ```
 
-流程：读取原文 → LLM 提取关键信息（或规则引擎 fallback）→ 写入 WAL → 等待 Dream 整合。
+流程：读取原文 → 写入 WAL → 等待 Dream 整合。
 
 ## 记忆写入格式
 
@@ -132,13 +134,11 @@ python scripts/ingest.py --list
 | 变量 | 默认值 | 说明 |
 |------|--------|------|
 | `LMK_ROOT` | 本技能根目录 | 覆盖存储根路径 |
-| `LMK_LLM_API_BASE` | `https://api.openai.com/v1` | LLM API 地址（用于 GC 自动压缩） |
-| `LMK_LLM_API_KEY` | (空) | LLM API 密钥 |
-| `LMK_LLM_MODEL` | `gpt-4o-mini` | GC 压缩使用的模型 |
 
 ## 注意事项
 
-- 本技能的 `memory/` 目录存储用户的持久化数据，**请勿随意删除**
+- 本系统是**纯数据层**，不依赖任何外部 LLM API。智能由调用方 Agent 自带。
+- `memory/` 目录存储用户的持久化数据，**请勿随意删除**
 - `system/wal_inbox.jsonl` 是 Append-Only 的缓冲区，只有 GC Worker 有权清空
 - 如果 `.dream_lock` 文件存在超过 1 小时，系统会视为死锁并自动清除
-- 如果 LLM API 未配置，GC Worker 会使用规则引擎进行 fallback（功能降级但不崩溃）
+

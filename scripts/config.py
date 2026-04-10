@@ -45,7 +45,3 @@ EMBEDDING_MODEL = os.environ.get("LMK_EMBED_MODEL", "BAAI/bge-small-zh-v1.5")
 EMBEDDING_DIM = 512
 SIMILARITY_THRESHOLD = 0.65  # 余弦相似度召回阈值
 
-# ── LLM API（用于 GC Worker 自动调用大模型执行压缩） ──
-LLM_API_BASE = os.environ.get("LMK_LLM_API_BASE", "https://api.openai.com/v1")
-LLM_API_KEY = os.environ.get("LMK_LLM_API_KEY", "")
-LLM_MODEL = os.environ.get("LMK_LLM_MODEL", "gpt-4o-mini")

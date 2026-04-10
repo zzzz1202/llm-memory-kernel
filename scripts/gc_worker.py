@@ -1,10 +1,12 @@
 """
 gc_worker.py — 异步垃圾回收器 (Map-Reduce GC)
-核心职责：
+核心职责（纯数据层，不依赖外部 LLM）：
   1. 检查三重门触发条件
-  2. Map Phase：按 Topic 分组处理 WAL Inbox，调用 LLM 执行微压缩
-  3. Reduce Phase：重建 L1 索引
-  4. Commit：清空 Inbox，归档老化数据，释放锁
+  2. Map Phase：按 Topic 分组处理 WAL Inbox，规则引擎追加合并
+  3. Reduce Phase：规则引擎重建 L1 索引
+  4. Lint：健康检查（死链、孤儿页、信息空洞、交叉引用）
+  5. Commit：清空 Inbox，归档老化数据，释放锁
+  6. 追加 log.md 记录
 """
 import json
 import shutil
@@ -20,7 +22,6 @@ from config import (
     DREAM_TIME_GATE_HOURS, DREAM_SESSION_GATE, DREAM_LOCK_TIMEOUT_HOURS,
     AGING_WARN_DAYS, AGING_ARCHIVE_DAYS, L1_MAX_LINES, L1_MAX_LINE_LENGTH,
     TOPIC_MAX_TOKENS, TOPIC_CHARS_PER_TOKEN,
-    LLM_API_BASE, LLM_API_KEY, LLM_MODEL,
 )
 from memory_router import (
     wal_read_all, wal_clear, l1_load_index, l2_list_topics,
@@ -126,86 +127,31 @@ def release_lock():
 
 
 # ═══════════════════════════════════════════
-# 3. LLM 调用封装
-# ═══════════════════════════════════════════
-
-def call_llm(system_prompt: str, user_prompt: str) -> str:
-    """
-    调用 LLM API 执行合并/压缩任务。
-    兼容 OpenAI API 格式（可指向 OpenAI/DeepSeek/本地 Ollama 等）。
-    """
-    try:
-        import openai
-        client = openai.OpenAI(base_url=LLM_API_BASE, api_key=LLM_API_KEY)
-        resp = client.chat.completions.create(
-            model=LLM_MODEL,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            temperature=0.2,
-            max_tokens=4096,
-        )
-        return resp.choices[0].message.content
-    except Exception as e:
-        print(f"[GC] LLM 调用失败: {e}")
-        return ""
-
-
-# ═══════════════════════════════════════════
-# 4. Map Phase：按 Topic 微压缩
+# 3. Map Phase：规则引擎追加合并（纯数据层，不依赖外部 LLM）
 # ═══════════════════════════════════════════
 
 def map_compact(topic_name: str, existing_content: str, new_entries: list[dict]) -> str:
     """
-    对单个 Topic 执行 Map 阶段的微压缩。
-    读取 core_prompts/MAP_COMPACT.md 作为 system prompt，
-    将现有内容 + 新日志作为 user prompt 发送给 LLM。
+    对单个 Topic 执行 Map 阶段的追加合并。
+    纯规则引擎：将新日志按时间顺序追加到 Topic 文件末尾。
+    智能压缩/去重/矛盾解决由调用方 Agent（如 Antigravity、OpenClaw）自行处理。
     """
-    # 加载 Map Compact prompt
-    prompt_path = PROMPTS_DIR / "MAP_COMPACT.md"
-    system_prompt = prompt_path.read_text(encoding="utf-8") if prompt_path.exists() else (
-        "你是数据 Compactor。将输入 A（旧状态）和输入 B（新日志）合并，"
-        "以新日志为准解决矛盾，压缩冗余，输出结构化 Markdown。"
-    )
-
     entries_text = "\n".join(
         f"- [{e.get('timestamp', '?')}] {e.get('content', '')}" for e in new_entries
     )
-    user_prompt = (
-        f"## 输入 A：现有状态\n```\n{existing_content}\n```\n\n"
-        f"## 输入 B：新增日志\n{entries_text}\n\n"
-        f"请执行合并与微压缩，主题名: {topic_name}"
-    )
-
-    result = call_llm(system_prompt, user_prompt)
-    if not result:
-        # LLM 不可用时 fallback：简单追加
-        return existing_content + "\n\n## 新增（待压缩）\n" + entries_text
-    return result
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    return existing_content + f"\n\n## 更新 ({now})\n" + entries_text
 
 
 # ═══════════════════════════════════════════
-# 5. Reduce Phase：重建 L1 索引
+# 4. Reduce Phase：规则引擎重建 L1 索引
 # ═══════════════════════════════════════════
 
 def reduce_rebuild_index(topic_metas: list[dict]) -> str:
     """
     对所有 Topic 的元数据执行 Reduce，重建 L1_INDEX.md。
-    如果 LLM 不可用，使用规则引擎自动重建。
+    纯规则引擎，不依赖外部 LLM。
     """
-    # 尝试用 LLM 重建（更智能的摘要）
-    prompt_path = PROMPTS_DIR / "REDUCE_INDEX.md"
-    if prompt_path.exists() and LLM_API_KEY:
-        system_prompt = prompt_path.read_text(encoding="utf-8")
-        user_prompt = "以下是所有 Topic 的元数据：\n" + json.dumps(
-            topic_metas, ensure_ascii=False, indent=2
-        )
-        result = call_llm(system_prompt, user_prompt)
-        if result:
-            return result
-
-    # ── Fallback：规则引擎自动重建 ──
     now = datetime.datetime.now().isoformat(timespec="minutes")
     lines = [
         "# L1 Memory Index\n",
@@ -285,7 +231,96 @@ def archive_topics(topic_names: list[str]):
 
 
 # ═══════════════════════════════════════════
-# 7. 备份（带清理策略）
+# 7. Lint 健康检查（融合 Karpathy Wiki Lint 理念）
+# ═══════════════════════════════════════════
+
+def lint_check() -> dict:
+    """
+    Wiki 式健康检查。检测：
+    - 死链：L1 索引指向不存在的 Topic 文件
+    - 孤儿页：Topic 文件未被 L1 索引引用
+    - 信息空洞：包含 [待填充] 的条目
+    - 缺失交叉引用：内容相关但未互相引用的 Topic 对
+    """
+    import re
+    errors = []   # 必须修复
+    warnings = [] # 建议修复
+    suggestions = [] # 可选优化
+
+    index_text = l1_load_index()
+    topics_on_disk = {p.stem for p in TOPICS_DIR.glob("*.md")} if TOPICS_DIR.exists() else set()
+
+    # 提取索引中引用的 topic 文件名
+    pointer_pattern = re.compile(r"topics/([\w\-]+)\.md", re.UNICODE)
+    topics_in_index = set(pointer_pattern.findall(index_text))
+
+    # 死链检测
+    for name in topics_in_index:
+        if name not in topics_on_disk:
+            errors.append(f"[死链] L1_INDEX 引用了 topics/{name}.md，但文件不存在")
+
+    # 孤儿页检测
+    for name in topics_on_disk:
+        if name not in topics_in_index:
+            warnings.append(f"[孤儿] topics/{name}.md 未在 L1_INDEX 中引用")
+
+    # 信息空洞检测
+    topic_contents = {}
+    for name in topics_on_disk:
+        content = l2_load_topic(TOPICS_DIR / f"{name}.md")
+        topic_contents[name] = content
+        if "[待填充]" in content or "(暂无)" in content:
+            suggestions.append(f"[空洞] topics/{name}.md 仍有未填充内容")
+
+    # 交叉引用检测：如果一个 Topic 的名字出现在另一个 Topic 的内容中，但没有显式引用
+    ref_pattern = re.compile(r"topics/([\w\-]+)\.md", re.UNICODE)
+    for name_a in topics_on_disk:
+        content_a = topic_contents.get(name_a, "")
+        refs_in_a = set(ref_pattern.findall(content_a))
+        for name_b in topics_on_disk:
+            if name_a == name_b:
+                continue
+            # 检查 name_b 是否在 name_a 的内容中被提及（以关键词形式）
+            # 将 snake_case 转为可能出现的中文关键词
+            b_readable = name_b.replace("_", " ").replace("-", " ")
+            if (b_readable in content_a.lower() or name_b in content_a.lower()) and name_b not in refs_in_a:
+                suggestions.append(
+                    f"[交叉引用] topics/{name_a}.md 提及了 \"{name_b}\"，建议添加 → 另见 topics/{name_b}.md"
+                )
+
+    return {
+        "errors": errors,
+        "warnings": warnings,
+        "suggestions": suggestions,
+    }
+
+
+# ═══════════════════════════════════════════
+# 8. log.md 日志追加
+# ═══════════════════════════════════════════
+
+def append_log(action: str, description: str):
+    """追加人类可读的日志到 memory/log.md。"""
+    from config import KERNEL_ROOT
+    log_path = KERNEL_ROOT / "memory" / "log.md"
+    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    entry = f"\n## [{now}] {action} | {description}\n"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if log_path.exists():
+        content = log_path.read_text(encoding="utf-8")
+        if "\n---\n" in content:
+            header, body = content.split("\n---\n", 1)
+            content = header + "\n---\n" + entry + body
+        else:
+            content += entry
+    else:
+        content = "# 操作日志 (Chronological Log)\n\n---\n" + entry
+    log_path.write_text(content, encoding="utf-8")
+
+
+# ═══════════════════════════════════════════
+# 9. 备份（带清理策略）
 # ═══════════════════════════════════════════
 
 def create_backup():
@@ -395,7 +430,7 @@ def run_dream(force: bool = False):
 
         # ════ 阶段 4：老化检测 (Aging Detection) ════
         update_lock_stage("phase_4_aging")
-        print(f"\n[阶段 4/5] 老化检测...")
+        print(f"\n[阶段 4/6] 老化检测...")
         warned, archive_candidates = detect_aging()
         print(f"  老化警告: {len(warned)} 个主题")
         print(f"  归档候选: {len(archive_candidates)} 个主题")
@@ -403,9 +438,24 @@ def run_dream(force: bool = False):
         if archive_candidates:
             archive_topics(archive_candidates)
 
-        # ════ 阶段 5：剪枝与重建 (Prune & Rebuild) ════
-        update_lock_stage("phase_5_rebuild")
-        print(f"\n[阶段 5/5] 剪枝与重建 L1 索引...")
+        # ════ 阶段 5：Lint 健康检查 ════
+        update_lock_stage("phase_5_lint")
+        print(f"\n[阶段 5/6] Lint 健康检查...")
+        lint_result = lint_check()
+        lint_errors = len(lint_result["errors"])
+        lint_warnings = len(lint_result["warnings"])
+        lint_suggestions = len(lint_result["suggestions"])
+        for e in lint_result["errors"]:
+            print(f"  🔴 {e}")
+        for w in lint_result["warnings"]:
+            print(f"  🟡 {w}")
+        for s in lint_result["suggestions"]:
+            print(f"  🟢 {s}")
+        print(f"  健康度: {lint_errors} 错误, {lint_warnings} 警告, {lint_suggestions} 建议")
+
+        # ════ 阶段 6：剪枝与重建 (Prune & Rebuild) ════
+        update_lock_stage("phase_6_rebuild")
+        print(f"\n[阶段 6/6] 剪枝与重建 L1 索引...")
 
         # 收集所有 Topic 的元数据
         topic_metas = []
@@ -444,10 +494,20 @@ def run_dream(force: bool = False):
             datetime.timedelta(hours=DREAM_TIME_GATE_HOURS)
         ).strftime("%Y-%m-%d %H:%M")
 
+        # 追加日志
+        log_desc = (
+            f"处理 {len(inbox_entries) if inbox_entries else 0} 条 WAL 记录, "
+            f"归档 {len(archive_candidates)} 个主题, "
+            f"索引 {new_lines} 行, "
+            f"Lint: {lint_errors}E/{lint_warnings}W/{lint_suggestions}S"
+        )
+        append_log("dream", log_desc)
+
         print("\n" + "=" * 60)
         print(f"[Dream] ✅ 整理完成！")
         print(f"  归档: {len(archive_candidates)} 个过期主题")
         print(f"  索引: {new_lines} 行")
+        print(f"  Lint: {lint_errors} 错误, {lint_warnings} 警告, {lint_suggestions} 建议")
         print(f"  下次建议整理时间: {next_dream}")
         print("=" * 60)
 

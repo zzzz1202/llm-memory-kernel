@@ -5,15 +5,47 @@ __pycache__/
 .venv/
 venv/
 
-# System
+# ══════════════════════════════════════
+# 个人数据（不进入 Git，每个人自己初始化）
+# ══════════════════════════════════════
+
+# WAL 日志（私人对话产物）
+system/wal_inbox.jsonl
+
+# 锁文件和计数器
 system/.dream_lock
 system/session_counter
 
 # Embeddings (regenerable)
 system/embeddings/vectors.json
 
-# Backups (large files)
+# Topic 文件（私人记忆，通过 init.py 初始化）
+memory/topics/*.md
+
+# L1 索引（自动生成）
+memory/L1_INDEX.md
+
+# 操作日志（私人时间线）
+memory/log.md
+
+# 归档目录
+memory/archive/
+
+# 原始素材（私人文件）
+raw/*
+!raw/README.md
+
+# 备份（大文件）
 backups/
+
+# ══════════════════════════════════════
+# 以下会进入 Git（引擎 + 模板 + 协议）
+# ══════════════════════════════════════
+# scripts/*.py          ✅ 进入
+# core_prompts/*.md     ✅ 进入
+# SKILL.md              ✅ 进入
+# README.md             ✅ 进入
+# raw/README.md         ✅ 进入
 
 # OS
 .DS_Store

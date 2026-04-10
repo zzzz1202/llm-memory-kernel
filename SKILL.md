@@ -1,6 +1,6 @@
 ---
 name: llm-memory-kernel
-description: 为无状态大语言模型提供外挂式持久化记忆内核。三层缓存架构（L1 索引 → L2 主题文件 → L3 归档），WAL 预写日志保障数据一致性，Map-Reduce GC 自动整理，RAG 向量召回兜底检索。
+description: 为无状态大语言模型提供外挂式持久化记忆内核。三层缓存架构（L1 索引 → L2 主题文件 → L3 归档），WAL 预写日志保障数据一致性，Map-Reduce GC 自动整理，RAG 向量召回兜底检索。融合 Karpathy Wiki Pattern：支持原始素材摄入、Lint 健康检查、人类可读时间线日志。
 ---
 
 # LLM Memory Kernel — 持久化记忆技能
@@ -41,10 +41,13 @@ core_prompts/            # 纯净版 Prompt 模板（无品牌营销内容）
 ├── TOPIC_TEMPLATE.md    # 新 Topic 文件模板
 └── ERRORS_TEMPLATE.md   # 错误自愈模板
 
-scripts/                 # Python 引擎（真正可执行的代码）
+raw/                     # 原始素材（刪文章、笔记等，不可变）
+
+scripts/                 # Python 引擎
 ├── config.py            # 全局配置（路径、阈值、API）
 ├── memory_router.py     # 路由器：WAL 写入 + L1/L2 匹配 + RAG 向量召回
-└── gc_worker.py         # GC Worker：三重门检查 + Map-Reduce 整理 + 备份
+├── gc_worker.py         # GC Worker：三重门检查 + Map-Reduce 整理 + Lint + 备份
+└── ingest.py            # 素材摄入引擎：读取 raw/ 文件 → 提取关键信息 → 写入 WAL
 ```
 
 ## 会话生命周期
@@ -89,7 +92,21 @@ python scripts/gc_worker.py --force
 python scripts/gc_worker.py --backup
 ```
 
-Dream 五阶段：定向（健康度扫描）→ 收集（WAL 分组）→ 整合（Map 微压缩）→ 老化检测 → 剪枝重建（Reduce 索引）
+Dream 六阶段：定向→收集→整合(Map)→老化检测→Lint健康检查→剪枝重建(Reduce)
+
+## 素材摄入 (Ingest)
+
+与对话中自动提取不同，Ingest 是主动向记忆系统“喂”外部素材（文章、笔记、书摘等）。
+
+```bash
+# 处理单个文件
+python scripts/ingest.py raw/文件名.md
+
+# 列出 raw/ 下的文件
+python scripts/ingest.py --list
+```
+
+流程：读取原文 → LLM 提取关键信息（或规则引擎 fallback）→ 写入 WAL → 等待 Dream 整合。
 
 ## 记忆写入格式
 

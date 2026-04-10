@@ -81,20 +81,21 @@ scripts/                 # Python 引擎
 当满足三重门条件（时间门 ≥24h + 会话门 ≥5次 + 锁门空闲）或用户输入 `/dream` 时：
 
 ```bash
-# 检查是否需要整理
-python scripts/gc_worker.py --check
+# 推荐流程：先预览，确认后再执行
+python scripts/gc_worker.py --dry-run   # 🔍 预览方案（不修改任何文件）
+python scripts/gc_worker.py --force     # ✅ 用户确认后执行
 
-# 执行整理（自动模式，需三重门全开）
-python scripts/gc_worker.py
-
-# 强制整理（忽略三重门）
-python scripts/gc_worker.py --force
-
-# 手动备份
-python scripts/gc_worker.py --backup
+# 其他命令
+python scripts/gc_worker.py --check     # 检查三重门状态
+python scripts/gc_worker.py --backup    # 手动备份
 ```
 
-Dream 六阶段：定向→收集→整合(Map)→老化检测→Lint健康检查→剪枝重建(Reduce)
+**确认机制（必须遵守）**：
+1. Agent **必须先运行 `--dry-run`**，展示计划变更方案给用户
+2. 方案包括：哪些 WAL 条目将合并到哪些 Topic、哪些文件将归档、Lint 发现了什么问题
+3. **等待用户明确说"确认"或"执行"后**，才运行 `--force` 执行实际操作
+4. 严禁跳过预览直接执行 `--force`
+
 
 ## 素材摄入 (Ingest)
 

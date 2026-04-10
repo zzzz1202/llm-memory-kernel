@@ -344,10 +344,11 @@ def create_backup():
 # 8. 主流程：Dream 五阶段执行
 # ═══════════════════════════════════════════
 
-def run_dream(force: bool = False):
+def run_dream(force: bool = False, dry_run: bool = False):
     """
-    执行 AutoDream 五阶段整理。
-    force=True 时跳过三重门检查（相当于用户手动 /dream）。
+    执行 AutoDream 六阶段整理。
+    force=True 时跳过三重门检查。
+    dry_run=True 时只展示方案不执行（范凯式确认机制）。
     """
     # ── 前置检查 ──
     if not force:
@@ -356,9 +357,14 @@ def run_dream(force: bool = False):
             print(f"[Dream] 未触发: {reason}")
             return
 
-    print("=" * 60)
-    print("[Dream] 🌙 开始记忆整理...")
-    print("=" * 60)
+    if dry_run:
+        print("=" * 60)
+        print("[Dream] 🔍 预览模式（不会执行任何修改）")
+        print("=" * 60)
+    else:
+        print("=" * 60)
+        print("[Dream] 🌙 开始记忆整理...")
+        print("=" * 60)
 
     acquire_lock("phase_1_orient")
 
@@ -415,9 +421,14 @@ def run_dream(force: bool = False):
                     ).replace("{created_at}", datetime.datetime.now().isoformat())
                     topic_path.parent.mkdir(parents=True, exist_ok=True)
 
-                # Map：调用 LLM 执行合并
+                # Map：合并新内容
                 new_content = map_compact(topic_name, existing, entries)
-                topic_path.write_text(new_content, encoding="utf-8")
+                if dry_run:
+                    print(f"  [预览] {topic_name}: 将合并 {len(entries)} 条记录")
+                    for e in entries:
+                        print(f"    + {e.get('content', '')[:80]}")
+                else:
+                    topic_path.write_text(new_content, encoding="utf-8")
 
                 # 统计
                 if l2_estimate_tokens(existing) > TOPIC_MAX_TOKENS:
@@ -436,7 +447,11 @@ def run_dream(force: bool = False):
         print(f"  归档候选: {len(archive_candidates)} 个主题")
 
         if archive_candidates:
-            archive_topics(archive_candidates)
+            if dry_run:
+                for name in archive_candidates:
+                    print(f"  [预览] 将归档: topics/{name}.md")
+            else:
+                archive_topics(archive_candidates)
 
         # ════ 阶段 5：Lint 健康检查 ════
         update_lock_stage("phase_5_lint")
@@ -472,6 +487,13 @@ def run_dream(force: bool = False):
                 "is_permanent": "[permanent]" in content.lower(),
                 "tag": "目标" if "[permanent]" in content.lower() else "主题",
             })
+
+        if dry_run:
+            print("\n" + "=" * 60)
+            print("[Dream] 🔍 预览完成。以上是计划执行的操作。")
+            print("确认后请运行: python gc_worker.py --force")
+            print("=" * 60)
+            return  # dry_run 不写文件、不清 WAL、不备份
 
         # Reduce：重建 L1 索引
         new_index = reduce_rebuild_index(topic_metas)
@@ -526,7 +548,9 @@ if __name__ == "__main__":
     import sys
     args = sys.argv[1:]
 
-    if "--force" in args or "/dream" in args:
+    if "--dry-run" in args:
+        run_dream(force=True, dry_run=True)
+    elif "--force" in args or "/dream" in args:
         run_dream(force=True)
     elif "--check" in args:
         ok, reason = should_dream()
@@ -536,8 +560,8 @@ if __name__ == "__main__":
         create_backup()
     else:
         print("用法:")
-        print("  python gc_worker.py --force    # 强制执行 Dream 整理")
-        print("  python gc_worker.py --check    # 检查三重门状态")
-        print("  python gc_worker.py --backup   # 手动备份")
-        print("\n自动触发模式下，三重门同时满足时自动执行。")
-        run_dream(force=False)
+        print("  python gc_worker.py --dry-run   # 🔍 预览方案（不执行，先看再决定）")
+        print("  python gc_worker.py --force     # ✅ 确认执行 Dream 整理")
+        print("  python gc_worker.py --check     # 检查三重门状态")
+        print("  python gc_worker.py --backup    # 手动备份")
+        print("\n推荐流程: --dry-run → 确认方案 → --force 执行")

@@ -30,7 +30,7 @@ _INJECTION_PATTERNS = [
     # Prompt injection 常见模式
     re.compile(r"ignore\s+(all\s+)?previous\s+instructions", re.IGNORECASE),
     re.compile(r"you\s+are\s+now\s+(a|an)\s+", re.IGNORECASE),
-    re.compile(r"system\s*:\s*", re.IGNORECASE),
+    re.compile(r"^\s*system\s*:", re.IGNORECASE | re.MULTILINE),
     re.compile(r"<\s*/?system\s*>", re.IGNORECASE),
     re.compile(r"forget\s+(everything|all)\s+(you|about)", re.IGNORECASE),
     re.compile(r"new\s+instructions?\s*:", re.IGNORECASE),

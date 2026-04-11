@@ -79,13 +79,16 @@ def init():
         index = (
             "# L1 Memory Index\n\n"
             f"> 自动生成，请勿手动编辑。上次重建：{now_iso}\n\n"
+            "## Critical Facts（核心速览）\n"
+            "> Agent 启动时优先读此区域。如需详情再按需加载 Topic 文件。\n\n"
+            "- （尚无核心事实，请通过对话积累）\n\n"
             "## Permanent (目标与梦想)\n"
             "- [目标] 主题：user_profile → 见 topics/user_profile.md\n"
             "- [目标] 主题：preferences → 见 topics/preferences.md\n\n"
             "## Active (近期活跃)\n"
             "- [主题] 错误记录与自愈 → 见 topics/errors_and_lessons.md\n\n"
             "---\n"
-            f"*索引行数：9/200*\n"
+            f"*索引行数：14/200*\n"
             f"*Topic 文件总数：3*\n"
             f"*最后一次 Dream 整理时间：{now_iso}*\n"
         )

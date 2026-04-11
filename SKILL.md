@@ -56,7 +56,7 @@ scripts/                 # Python 引擎
 
 ### 1. 会话启动（分层加载）
 ```
-第一步：读取 L1_INDEX.md 的 "Critical Facts" 区域（≠10行，秒读核心身份信息）
+第一步：读取 L1_INDEX.md 的 "Critical Facts" 区域（≤10行，秒读核心身份信息）
 第二步：按需加载具体 Topic 文件（当对话涉及某个主题时）
 第三步：递增 session_counter（用于触发 Dream 的会话门）
 ```

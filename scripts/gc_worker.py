@@ -217,7 +217,7 @@ def reduce_rebuild_index(topic_metas: list[dict]) -> str:
 
 
 # ═══════════════════════════════════════════
-# 6. 老化检测与归档
+# 5. 老化检测与归档
 # ═══════════════════════════════════════════
 
 def detect_aging() -> tuple[list[str], list[str]]:
@@ -263,7 +263,7 @@ def archive_topics(topic_names: list[str]):
 
 
 # ═══════════════════════════════════════════
-# 7. Lint 健康检查（融合 Karpathy Wiki Lint 理念）
+# 6. Lint 健康检查（融合 Karpathy Wiki Lint 理念）
 # ═══════════════════════════════════════════
 
 def lint_check() -> dict:
@@ -328,7 +328,7 @@ def lint_check() -> dict:
 
 
 # ═══════════════════════════════════════════
-# 8. log.md 日志追加
+# 7. log.md 日志追加
 # ═══════════════════════════════════════════
 
 def append_log(action: str, description: str):
@@ -352,7 +352,7 @@ def append_log(action: str, description: str):
 
 
 # ═══════════════════════════════════════════
-# 9. 备份（带清理策略）
+# 8. 备份（带清理策略）
 # ═══════════════════════════════════════════
 
 def create_backup():
@@ -373,7 +373,7 @@ def create_backup():
 
 
 # ═══════════════════════════════════════════
-# 8. 主流程：Dream 五阶段执行
+# 9. 主流程：Dream 六阶段执行
 # ═══════════════════════════════════════════
 
 def run_dream(force: bool = False, dry_run: bool = False):
@@ -402,7 +402,7 @@ def run_dream(force: bool = False, dry_run: bool = False):
 
     try:
         # ════ 阶段 1：定向 (Orient) ════
-        print("\n[阶段 1/5] 定向：扫描记忆系统健康度...")
+        print("\n[阶段 1/6] 定向：扫描记忆系统健康度...")
         index_text = l1_load_index()
         index_lines = len(index_text.splitlines())
         topics = l2_list_topics()
@@ -421,7 +421,7 @@ def run_dream(force: bool = False, dry_run: bool = False):
 
         # ════ 阶段 2：收集 (Gather) ════
         update_lock_stage("phase_2_gather")
-        print(f"\n[阶段 2/5] 收集：处理 WAL Inbox...")
+        print(f"\n[阶段 2/6] 收集：处理 WAL Inbox...")
 
         if not inbox_entries:
             print("  Inbox 为空，跳过收集与整合阶段")
@@ -434,7 +434,7 @@ def run_dream(force: bool = False, dry_run: bool = False):
 
             # ════ 阶段 3：整合 (Consolidate) — Map Phase ════
             update_lock_stage("phase_3_consolidate")
-            print(f"\n[阶段 3/5] 整合：对每个 Topic 执行独立微压缩...")
+            print(f"\n[阶段 3/6] 整合：对每个 Topic 执行独立微压缩...")
 
             conflicts_resolved = 0
             compressed_count = 0

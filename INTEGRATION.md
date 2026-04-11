@@ -44,7 +44,7 @@ from memory_router import wal_append
 wal_append(
     topic="user_profile",          # 归属主题
     content="用户偏好使用异步 API",   # 精简客观描述
-    action="add_fact",             # add_fact | correction | preference_update
+    action="add_fact",             # add_fact | correction | preference_update | discovery | milestone
     source="agent_name",           # 来源标识
 )
 ```

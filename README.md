@@ -129,11 +129,14 @@ llm-memory-kernel/
 3. **WAL 优先**：所有写入通过预写日志，永不直接修改 Topic 文件。
 4. **零依赖**：Python 3.9+ 即可运行，不需要安装任何第三方包。
 5. **引擎与数据分离**：仓库只包含引擎代码，私人记忆通过 `init.py` 本地生成。
+6. **分层加载**：L1 索引顶部的 Critical Facts 区域（≤10 行）让 Agent 秒读核心身份，详情按需加载。
+7. **确认机制**：Dream 整理前必须 `--dry-run` 展示方案，用户确认后才执行 `--force`。
 
 ## 致谢
 
-- [Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — Wiki Pattern 理念
+- [Andrej Karpathy](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f) — Wiki Pattern 理念（Raw Sources、Index、Log、Lint）
 - 范凯（范凯说AI）— 工程化改造方案（确认机制、领域隔离、对话萃取）
+- [MemPalace](https://github.com/milla-jovovich/mempalace) — 分层加载策略（L0+L1 Critical Facts）、Memory Hall 五分类法、Auto-Save Hook 理念
 
 ## License
 

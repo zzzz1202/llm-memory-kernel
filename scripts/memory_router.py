@@ -212,21 +212,11 @@ class SimpleVectorStore:
 def get_embedding(text: str) -> list[float]:
     """
     获取文本的 Embedding 向量。
-    默认实现：调用 OpenAI 兼容 API。
-    可替换为本地模型（如 sentence-transformers）。
+    默认实现：返回零向量（纯数据层不依赖外部 API）。
+    如需启用语义检索，由调用方 Agent 自行提供 embedding 函数。
     """
-    try:
-        import openai
-        from config import LLM_API_BASE, LLM_API_KEY
-        client = openai.OpenAI(base_url=LLM_API_BASE, api_key=LLM_API_KEY)
-        resp = client.embeddings.create(
-            model="text-embedding-3-small",
-            input=text[:2000],  # 截断防溢出
-        )
-        return resp.data[0].embedding
-    except Exception:
-        # Fallback：生成零向量（功能降级但不崩溃）
-        return [0.0] * EMBEDDING_DIM
+    # 纯数据层默认：返回零向量（功能降级但不崩溃）
+    return [0.0] * EMBEDDING_DIM
 
 
 # ═══════════════════════════════════════════

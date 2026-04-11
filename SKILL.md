@@ -54,11 +54,14 @@ scripts/                 # Python 引擎
 
 ## 会话生命周期
 
-### 1. 会话启动
+### 1. 会话启动（分层加载）
 ```
-加载 memory/L1_INDEX.md → 获取全局记忆概览
-递增 system/session_counter（用于触发 Dream 的会话门）
+第一步：读取 L1_INDEX.md 的 "Critical Facts" 区域（≠10行，秒读核心身份信息）
+第二步：按需加载具体 Topic 文件（当对话涉及某个主题时）
+第三步：递增 session_counter（用于触发 Dream 的会话门）
 ```
+
+> **分层加载策略**：Agent 不需要在启动时读取全部记忆。Critical Facts 提供足够的上下文（~170 tokens），详细信息按需加载。
 
 ### 2. 日常对话中的记忆操作
 
@@ -76,6 +79,19 @@ scripts/                 # Python 引擎
 1. 立即记录到 WAL（action: "correction"）
 2. 参照 `core_prompts/ERRORS_TEMPLATE.md` 的格式填写错误记录
 3. 后续输出复杂方案前，先查阅错误记录中的自检清单
+
+### 2.5 定期保存检查（每 ~10 轮对话）
+
+> 借鉴 MemPalace Auto-Save Hook：避免会话结束时批量遗忘。
+
+Agent 在较长的对话中（每处理 ~10 轮交互后），应主动回顾近期对话，检查是否有值得保存的信息：
+
+1. 是否产生了新的技术决策（`add_fact`）
+2. 是否有关键洞察或新方法论（`discovery`）
+3. 是否完成了某个重要里程碑（`milestone`）
+4. 用户是否更新了偏好（`preference_update`）
+
+如有，立即写入 WAL，不等到会话结束。
 
 ### 3. 会话结束 / Dream 整理
 当满足三重门条件（时间门 ≥24h + 会话门 ≥5次 + 锁门空闲）或用户输入 `/dream` 时：
@@ -115,8 +131,18 @@ python scripts/ingest.py --list
 
 通过 WAL 写入的每条记录格式：
 ```jsonl
-{"timestamp": "ISO-8601", "action": "add_fact|correction|preference_update", "topic": "snake_case_topic_name", "content": "精简客观描述", "source": "chat_turn_N"}
+{"timestamp": "ISO-8601", "action": "add_fact|correction|preference_update|discovery|milestone", "topic": "snake_case_topic_name", "content": "精简客观描述", "source": "chat_turn_N"}
 ```
+
+### Action 类型说明
+
+| action | 含义 | 典型场景 |
+|--------|------|--------|
+| `add_fact` | 事实/决策 | 技术选型已锁定、架构决策确认 |
+| `correction` | 纠正/自愈 | 用户指出 AI 的错误 |
+| `preference_update` | 偏好更新 | 用户习惯、工具偏好、风格变化 |
+| `discovery` | 洞察/突破 | 对话中产生的新方法论、关键发现 |
+| `milestone` | 里程碑/事件 | 项目完成、调试记录、关键节点 |
 
 ## 关键阈值
 

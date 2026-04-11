@@ -15,21 +15,35 @@
    - **对话洞察**：对话中自然产生的核心结论、方法论或分析框架（对话本身即知识）
    - **交叉引用发现**：如果新信息与已有 Topic 存在关联，标注 `cross_ref` 字段
 
+## Action 类型（五分类）
+
+每条记忆必须标注 action 类型。借鉴 MemPalace Memory Hall 分类法：
+
+| action | 含义 | 使用场景 |
+|--------|------|---------|
+| `add_fact` | 事实/决策 | 已锁定的技术选型、架构决策、角色分工 |
+| `correction` | 纠正/自愈 | 用户纠正了 AI 的错误，需要记录以避免重犯 |
+| `preference_update` | 偏好更新 | 用户的习惯、风格、工具偏好变化 |
+| `discovery` | 洞察/突破 | 对话中产生的新架构思路、方法论、关键发现 |
+| `milestone` | 里程碑/事件 | 项目完成、调试记录、重要会议、关键节点 |
+
 ## 输出格式
 
 以 JSON Lines 格式输出，每条事实一行，**不要包含任何多余解释**：
 
 ```jsonl
 {"timestamp": "ISO-8601", "action": "add_fact", "topic": "主题名", "content": "精简描述", "source": "chat_turn_N"}
-{"timestamp": "ISO-8601", "action": "add_fact", "topic": "主题名", "content": "精简描述", "source": "chat_turn_N", "cross_ref": ["关联topic_1", "关联topic_2"]}
+{"timestamp": "ISO-8601", "action": "discovery", "topic": "主题名", "content": "精简描述", "source": "chat_turn_N", "cross_ref": ["关联topic_1"]}
+{"timestamp": "ISO-8601", "action": "milestone", "topic": "主题名", "content": "精简描述", "source": "chat_turn_N"}
 ```
 
 ## 对话萃取协议
 
 当对话中出现以下情况时，将对话结论本身视为独立知识：
-- 深度讨论某个问题后达成的共识或结论
-- 对话中形成的新方法论或工作流
-- 比较分析后的决策框架
+- 深度讨论某个问题后达成的共识或结论 → `discovery`
+- 对话中形成的新方法论或工作流 → `discovery`
+- 比较分析后的决策框架 → `add_fact`
+- 项目完成了某个阶段 → `milestone`
 
 提取时剥离客套话和无意义问答，只保留核心洞察。
 
@@ -38,4 +52,3 @@
 - 如果本轮对话中无新的长期记忆价值信息，输出空（不要强制造数据）
 - 单次提取不超过 10 条
 - topic 名称使用 snake_case 英文
-

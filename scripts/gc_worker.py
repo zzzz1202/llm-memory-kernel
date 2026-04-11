@@ -158,7 +158,39 @@ def reduce_rebuild_index(topic_metas: list[dict]) -> str:
         f"> 自动生成，请勿手动编辑。上次重建：{now}\n",
     ]
 
-    # 分类
+    # ═══ Critical Facts（核心事实速览，≤10 行）═══
+    # Agent 启动时只需读这个区域即可获得用户身份和最关键的上下文。
+    # 借鉴 MemPalace L0+L1 分层加载策略：170 tokens 秒读核心信息。
+    lines.append("## Critical Facts（核心速览）")
+    lines.append("> Agent 启动时优先读此区域。如需详情再按需加载 Topic 文件。\n")
+
+    critical_lines = []
+    for t in topic_metas:
+        topic_path = TOPICS_DIR / f"{t['topic']}.md"
+        if not topic_path.exists():
+            continue
+        content = topic_path.read_text(encoding="utf-8")
+        # 提取 ## 核心事实 下的第一批条目（非 [待填充]）
+        in_core = False
+        for line in content.splitlines():
+            if "核心事实" in line or "Critical" in line:
+                in_core = True
+                continue
+            if in_core:
+                if line.startswith("##"):  # 遇到下一个标题，停止
+                    break
+                stripped = line.strip()
+                if stripped.startswith("- ") and "[待填充]" not in stripped:
+                    fact = stripped[2:].strip()[:100]
+                    critical_lines.append(f"- **{t['topic']}**: {fact}")
+
+    if critical_lines:
+        for cl in critical_lines[:10]:  # 最多 10 条
+            lines.append(cl)
+    else:
+        lines.append("- （尚无核心事实，请通过对话积累）")
+
+    # ═══ 分类索引 ═══
     permanent = [t for t in topic_metas if t.get("is_permanent")]
     active = [t for t in topic_metas if not t.get("is_permanent")]
     active.sort(key=lambda x: x.get("last_updated", ""), reverse=True)

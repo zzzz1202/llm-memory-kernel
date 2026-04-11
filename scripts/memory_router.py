@@ -24,6 +24,39 @@ from config import (
 # 1. WAL 预写日志（Append-Only 安全写入）
 # ═══════════════════════════════════════════
 
+# ── 安全扫描（借鉴 Hermes Agent 的 Prompt Injection 防护） ──
+
+_INJECTION_PATTERNS = [
+    # Prompt injection 常见模式
+    re.compile(r"ignore\s+(all\s+)?previous\s+instructions", re.IGNORECASE),
+    re.compile(r"you\s+are\s+now\s+(a|an)\s+", re.IGNORECASE),
+    re.compile(r"system\s*:\s*", re.IGNORECASE),
+    re.compile(r"<\s*/?system\s*>", re.IGNORECASE),
+    re.compile(r"forget\s+(everything|all)\s+(you|about)", re.IGNORECASE),
+    re.compile(r"new\s+instructions?\s*:", re.IGNORECASE),
+    # 凭证泄露模式
+    re.compile(r"(api[_-]?key|secret|password|token)\s*[:=]\s*\S{8,}", re.IGNORECASE),
+    re.compile(r"ssh-rsa\s+AAAA", re.IGNORECASE),
+    re.compile(r"-----BEGIN\s+(RSA\s+)?PRIVATE\s+KEY-----", re.IGNORECASE),
+]
+
+# 不可见 Unicode 字符（零宽字符等）
+_INVISIBLE_CHARS = re.compile(r"[\u200b\u200c\u200d\u2060\u2061\u2062\u2063\u2064\ufeff]")
+
+
+def _security_scan(content: str) -> str | None:
+    """
+    扫描记忆内容是否包含安全威胁。
+    返回 None 表示安全，返回字符串表示被拦截的原因。
+    """
+    for pattern in _INJECTION_PATTERNS:
+        if pattern.search(content):
+            return f"安全拦截: 匹配到危险模式 [{pattern.pattern[:50]}...]"
+    if _INVISIBLE_CHARS.search(content):
+        return "安全拦截: 包含不可见 Unicode 字符（可能是隐蔽注入）"
+    return None
+
+
 def wal_append(topic: str, content: str, action: str = "add_fact",
                source: str = "unknown") -> dict:
     """
@@ -31,6 +64,11 @@ def wal_append(topic: str, content: str, action: str = "add_fact",
     大模型在日常对话中 **绝不直接修改** L1_INDEX 或 Topic 文件，
     所有写入都通过此函数进入 Inbox，等 GC Worker 批量处理。
     """
+    # 安全扫描
+    threat = _security_scan(content)
+    if threat:
+        return {"blocked": True, "reason": threat, "content": content[:100]}
+
     entry = {
         "timestamp": datetime.datetime.now().isoformat(),
         "action": action,
